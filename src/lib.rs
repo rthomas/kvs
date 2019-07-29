@@ -84,23 +84,9 @@ pub struct KvStore {
 }
 
 impl KvStore {
-    /// Open a KvStore.
-    ///
-    /// The path provided should be a directory, otherwise an error will be returned.
-    /// If the path does not exist it will be created.
-    ///
-    /// Files in this path (if it exists) will be loaded into the in-memory index.
-    pub fn open(path: &Path) -> Result<KvStore> {
-        if !path.is_dir() {
-            return Err(Error::from(InvalidPathError {
-                dir: path.to_owned(),
-            }));
-        }
-        unimplemented!()
-    }
     /// Open a KvStore for a given path. If the path is a directory then a file will be created in this directory.
     /// If the path does not exist then a file will be created and initialized at that location.
-    pub fn old_open(path: &Path) -> Result<KvStore> {
+    pub fn open(path: &Path) -> Result<KvStore> {
         // TODO - this should just take a directory and we will create multiple files in there for the log.
         let mut buf = path.to_path_buf();
         buf.push(DEFAULT_FILE_PREFIX);
