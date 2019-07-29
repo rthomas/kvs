@@ -1,6 +1,7 @@
 use clap::{App, AppSettings, Arg, SubCommand};
+use kvs::{KeyNotFoundError, KvStore, Result};
 
-fn main() {
+fn main() -> Result<()> {
     let matches = App::new(env!("CARGO_PKG_NAME"))
         .setting(AppSettings::ArgRequiredElseHelp)
         .version(env!("CARGO_PKG_VERSION"))
@@ -35,19 +36,48 @@ fn main() {
                 ),
         )
         .get_matches();
-    match matches.subcommand_name() {
-        Some("get") => {
-            eprintln!("unimplemented");
-            std::process::exit(1);
-        }
-        Some("set") => {
-            eprintln!("unimplemented");
-            std::process::exit(1);
-        }
-        Some("rm") => {
-            eprintln!("unimplemented");
-            std::process::exit(1);
-        }
-        Some(_) | None => {}
+
+    let mut kv_store = KvStore::open(std::env::current_dir()?.as_path())?;
+
+    if let Some(cmd) = matches.subcommand_matches("get") {
+        let key = cmd.value_of("KEY").unwrap().to_string();
+        match kv_store.get(key) {
+            Ok(Some(val)) => {
+                println!("{}", val);
+            }
+            Ok(None) => {
+                println!("Key not found");
+            }
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+        };
     }
+
+    if let Some(cmd) = matches.subcommand_matches("set") {
+        let key = cmd.value_of("KEY").unwrap().to_string();
+        let val = cmd.value_of("VAL").unwrap().to_string();
+        kv_store.set(key, val)?;
+    }
+
+    if let Some(cmd) = matches.subcommand_matches("rm") {
+        let key = cmd.value_of("KEY").unwrap().to_string();
+        match kv_store.remove(key) {
+            Ok(_) => {}
+            Err(e) => {
+                match e.downcast::<KeyNotFoundError>() {
+                    Ok(_) => {
+                        println!("Key not found");
+                    }
+                    Err(e) => {
+                        eprintln!("Error: {}", e);
+                    }
+                };
+                std::process::exit(1);
+            }
+        }
+    }
+
+    Ok(())
 }
