@@ -108,7 +108,7 @@ impl KvStore {
 
         let log = AppendLog::load(&log_file)?;
 
-        let store = KvStore { 
+        let store = KvStore {
             log: log,
             log_file: log_file,
         };
@@ -173,7 +173,7 @@ impl KvStore {
 }
 
 impl Drop for KvStore {
-    fn drop (&mut self) {
+    fn drop(&mut self) {
         self.try_compact().unwrap();
     }
 }
