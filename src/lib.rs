@@ -6,7 +6,7 @@ pub mod append_log;
 
 use append_log::{AppendLog, LogCommand};
 use failure::{Error, Fail};
-use std::fs::OpenOptions;
+use std::fs::{self, OpenOptions};
 use std::path::{Path, PathBuf};
 
 /// The result type used for KvStore.
@@ -37,6 +37,7 @@ const KV_FILE_PREFIX: &str = "kv_store.log";
 pub struct KvStore {
     /// Log representation of the on-disk file.
     log: AppendLog,
+    log_file: PathBuf,
 }
 
 impl KvStore {
@@ -107,7 +108,10 @@ impl KvStore {
 
         let log = AppendLog::load(&log_file)?;
 
-        let store = KvStore { log };
+        let store = KvStore { 
+            log: log,
+            log_file: log_file,
+        };
         // store.compact_log()?;
         Ok(store)
     }
@@ -123,10 +127,11 @@ impl KvStore {
     /// Set a value for a given key, overriding a previously set value if it exists.
     pub fn set(&mut self, key: String, val: String) -> Result<()> {
         self.log
-            .append(LogCommand::Set, key.as_bytes(), Some(val.as_bytes()))
+            .append(LogCommand::Set, key.as_bytes(), Some(val.as_bytes()))?;
+        self.try_compact()
     }
 
-    /// Remnove a key and value from the store.
+    /// Remove a key and value from the store.
     pub fn remove(&mut self, key: String) -> Result<()> {
         let k = key.as_bytes();
 
@@ -134,6 +139,41 @@ impl KvStore {
             return Err(Error::from(KeyNotFoundError { key }));
         }
 
-        self.log.append(LogCommand::Remove, k, None)
+        self.log.append(LogCommand::Remove, k, None)?;
+        self.try_compact()
+    }
+
+    fn try_compact(&mut self) -> Result<()> {
+        // If we have < 50% utilization of the log, compact.
+        if self.log.len() > 10 * self.log.index_len() {
+            self.compact_log()?
+        }
+        Ok(())
+    }
+
+    fn compact_log(&mut self) -> Result<()> {
+        let name = self.log_file.file_name().unwrap().to_string_lossy();
+        let s: Vec<&str> = name.rsplit('.').collect();
+        let mut idx: u64 = s[0].parse()?;
+        idx += 1;
+        let i = idx.to_string();
+        let mut new_name = String::from(KV_FILE_PREFIX);
+        new_name.push_str(".");
+        new_name.push_str(i.as_str());
+        eprintln!("New Log Name: {}", new_name);
+        let mut new_log = PathBuf::from(&self.log_file);
+        new_log.set_file_name(new_name);
+        let log = self.log.compact(&new_log)?;
+
+        self.log = log;
+        fs::remove_file(self.log_file.to_owned())?;
+        self.log_file = new_log;
+        Ok(())
+    }
+}
+
+impl Drop for KvStore {
+    fn drop (&mut self) {
+        self.try_compact().unwrap();
     }
 }

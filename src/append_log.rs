@@ -94,9 +94,44 @@ impl AppendLog {
 
     /// Compacts the current Log to the new path specified.
     ///
-    /// This consumes the Log and returns the new Log.
-    pub fn compact(self, _path: &Path) -> Result<AppendLog> {
-        unimplemented!()
+    /// It is still possible to write to this log.
+    pub fn compact(&mut self, path: &Path) -> Result<AppendLog> {
+        if path.exists() {
+            // We don't want to clobber anything when we compact.
+            return Err(Error::from(InvalidLogFileError {}));
+        }
+
+        eprintln!("Compacting into file: {:?}", path);
+
+        // Create a new log as the compaction target.
+        let write_file = OpenOptions::new()
+                .read(true)
+                .append(true)
+                .create(true)
+                .open(path)?;
+        let mut log = AppendLog {
+            index: HashMap::new(),
+            log_file_read: OpenOptions::new()
+                .read(true)
+                .write(false)
+                .open(path)?,
+            log_file_write: write_file,
+            entry_count: 0,
+        };
+
+        for (k, _) in self.index.clone().into_iter() {
+            match self.fetch_by_key(&k)? {
+                Some(bytes) => {
+                    log.append(LogCommand::Set, &k, Some(bytes.as_ref()))?;   
+                }
+                None => {
+                    log.append(LogCommand::Set, &k, None)?;
+                }
+            }
+        }
+
+        log.build_index()?;
+        Ok(log)    
     }
 
     /// Flushes any buffered LogEntries to disk.
