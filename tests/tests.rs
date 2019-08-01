@@ -294,7 +294,7 @@ fn compaction() -> Result<()> {
             let key = format!("key{}", key_id);
             assert_eq!(store.get(key)?, Some(format!("{}", iter)));
         }
-        return Ok(()); 
+        return Ok(());
     }
 
     panic!("No compaction detected");
