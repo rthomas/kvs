@@ -144,7 +144,7 @@ impl KvStore {
     }
 
     fn try_compact(&mut self) -> Result<()> {
-        // If we have < 50% utilization of the log, compact.
+        // Compact when the log is more than 10x the index entries.
         if self.log.len() > 10 * self.log.index_len() {
             self.compact_log()?
         }
