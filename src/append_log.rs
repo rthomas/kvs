@@ -46,6 +46,20 @@ impl LogEntry {
     }
 }
 
+
+// NEW for MT impl:
+// LogReader and LogWriter each maintain their own File references, and recieve a channel from the AppendLog.
+// Start with a single reader / writer. Then multi-reader, single writer. Then come up with a plan for multi-writer-multi-file.
+// This will need more support from the API for handling multiple files and compaction.
+
+struct LogReader {
+
+}
+
+struct LogWriter {
+
+}
+
 /// An AppendOnly, indexed log.
 ///
 /// Using LogCommand's byte-slices can be appended into the log and addressed by the key that was used to add them.
