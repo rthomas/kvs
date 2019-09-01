@@ -108,10 +108,7 @@ impl KvStore {
 
         let log = AppendLog::load(&log_file)?;
 
-        let store = KvStore {
-            log: log,
-            log_file: log_file,
-        };
+        let store = KvStore { log, log_file };
         // store.compact_log()?;
         Ok(store)
     }
