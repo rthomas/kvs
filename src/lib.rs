@@ -8,6 +8,7 @@ use append_log::{AppendLog, LogCommand};
 use failure::{Error, Fail};
 use std::fs::{self, OpenOptions};
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, RwLock};
 
 /// The result type used for KvStore.
 pub type Result<T> = std::result::Result<T, Error>;
@@ -36,7 +37,7 @@ const KV_FILE_PREFIX: &str = "kv_store.log";
 /// A persistant Sting based Key-Value store.
 pub struct KvStore {
     /// Log representation of the on-disk file.
-    log: AppendLog,
+    log: Arc<RwLock<AppendLog>>,
     log_file: PathBuf,
 }
 
@@ -109,7 +110,7 @@ impl KvStore {
         let log = AppendLog::load(&log_file)?;
 
         let store = KvStore {
-            log: log,
+            log: Arc::new(RwLock::new(log)),
             log_file: log_file,
         };
         // store.compact_log()?;
@@ -118,7 +119,7 @@ impl KvStore {
 
     /// Get the value associated with the provided key, or None otherwise.
     pub fn get(&mut self, key: String) -> Result<Option<String>> {
-        match self.log.fetch_by_key(key.as_bytes())? {
+        match self.log.write().unwrap().fetch_by_key(key.as_bytes())? {
             Some(bytes) => Ok(Some(String::from_utf8(bytes.to_vec())?)),
             None => Ok(None),
         }
@@ -127,7 +128,7 @@ impl KvStore {
     /// Set a value for a given key, overriding a previously set value if it exists.
     pub fn set(&mut self, key: String, val: String) -> Result<()> {
         self.log
-            .append(LogCommand::Set, key.as_bytes(), Some(val.as_bytes()))?;
+            .write().unwrap().append(LogCommand::Set, key.as_bytes(), Some(val.as_bytes()))?;
         self.try_compact()
     }
 
@@ -135,20 +136,27 @@ impl KvStore {
     pub fn remove(&mut self, key: String) -> Result<()> {
         let k = key.as_bytes();
 
-        if !self.log.contains(k) {
-            return Err(Error::from(KeyNotFoundError { key }));
-        }
+        {
+            let mut l = self.log.write().unwrap();
 
-        self.log.append(LogCommand::Remove, k, None)?;
+            if !l.contains(k) {
+                return Err(Error::from(KeyNotFoundError { key }));
+            }
+
+            l.append(LogCommand::Remove, k, None)?;
+        }
         self.try_compact()
     }
 
     fn try_compact(&mut self) -> Result<()> {
         // Compact when the log is more than 10x the index entries.
-        if self.log.len() > 10 * self.log.index_len() {
-            self.compact_log()?
+        {
+            let l = self.log.read().unwrap();
+            if l.len() < 10 * l.index_len() {
+                return Ok(());
+            }
         }
-        Ok(())
+        self.compact_log()
     }
 
     fn compact_log(&mut self) -> Result<()> {
@@ -163,12 +171,21 @@ impl KvStore {
         eprintln!("New Log Name: {}", new_name);
         let mut new_log = PathBuf::from(&self.log_file);
         new_log.set_file_name(new_name);
-        let log = self.log.compact(&new_log)?;
+        let log = self.log.write().unwrap().compact(&new_log)?;
 
-        self.log = log;
+        self.log = Arc::new(RwLock::new(log));
         fs::remove_file(self.log_file.to_owned())?;
         self.log_file = new_log;
         Ok(())
+    }
+}
+
+impl Clone for KvStore {
+    fn clone(&self) -> Self {
+        KvStore {
+            log: self.log.clone(),
+            log_file: self.log_file.clone(),
+        }
     }
 }
 
