@@ -1,0 +1,2 @@
+- Interior mutability for AppendLog
+- Part 3 of the kvs project for exposing a network server and client.
