@@ -109,14 +109,10 @@ impl KvStore {
 
         let log = AppendLog::load(&log_file)?;
 
-<<<<<<< HEAD
-        let store = KvStore { log, log_file };
-=======
         let store = KvStore {
             log: Arc::new(RwLock::new(log)),
             log_file: log_file,
         };
->>>>>>> 6ac79e4e659abdc0dba652c876a204f6951e4b1e
         // store.compact_log()?;
         Ok(store)
     }
