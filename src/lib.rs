@@ -119,7 +119,7 @@ impl KvStore {
 
     /// Get the value associated with the provided key, or None otherwise.
     pub fn get(&mut self, key: String) -> Result<Option<String>> {
-        match self.log.write().unwrap().fetch_by_key(key.as_bytes())? {
+        match self.log.read().unwrap().fetch_by_key(key.as_bytes())? {
             Some(bytes) => Ok(Some(String::from_utf8(bytes.to_vec())?)),
             None => Ok(None),
         }
@@ -169,13 +169,14 @@ impl KvStore {
         new_name.push_str(".");
         new_name.push_str(i.as_str());
         eprintln!("New Log Name: {}", new_name);
+        
         let mut new_log = PathBuf::from(&self.log_file);
         new_log.set_file_name(new_name);
-        let log = self.log.write().unwrap().compact(&new_log)?;
-
-        self.log = Arc::new(RwLock::new(log));
-        fs::remove_file(self.log_file.to_owned())?;
+        self.log.write().unwrap().compact(&new_log)?;
         self.log_file = new_log;
+
+        fs::remove_file(self.log_file.to_owned())?;
+        
         Ok(())
     }
 }

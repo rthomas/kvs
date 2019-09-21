@@ -5,6 +5,7 @@
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use failure::{Error, Fail};
 use serde::{Deserialize, Serialize};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
@@ -50,6 +51,64 @@ impl LogEntry {
 ///
 /// Using LogCommand's byte-slices can be appended into the log and addressed by the key that was used to add them.
 pub struct AppendLog {
+    inner: RefCell<InnerAppendLog>,
+}
+
+impl AppendLog {
+    /// Loads a log file from the given path.
+    pub fn load(path: &Path) -> Result<AppendLog> {
+        Ok(AppendLog {
+            inner: RefCell::new(InnerAppendLog::load(path)?),
+        })
+    }
+
+    /// Compacts the log into the new path, closing out the old one.
+    /// Log entries can continue to be written to the AppendLog.
+    pub fn compact(&mut self, path: &Path) -> Result<()> {
+        let new_log = self.inner.get_mut().compact(path)?;
+        self.inner.replace(new_log);
+        Ok(())
+    }
+
+    /// Flush the logs to their storage backend.
+    pub fn flush(&mut self) -> Result<()> {
+        self.inner.get_mut().flush()
+    }
+
+    /// Append the given LogCommand to the log.
+    pub fn append(&mut self, cmd: LogCommand, key: &[u8], val: Option<&[u8]>) -> Result<()> {
+        self.inner.borrow_mut().append(cmd, key, val)
+    }
+
+    /// Returns true iff the value is currently in the index.
+    /// i.e. it has been added and not removed.
+    pub fn contains(&self, key: &[u8]) -> bool {
+        self.inner.borrow_mut().contains(key)
+    }
+    
+    /// Fetches the value from the index.
+    pub fn fetch_by_key(&self, key: &[u8]) -> Result<Option<Box<[u8]>>> {
+        self.inner.borrow_mut().fetch_by_key(key)
+    }
+
+    /// Return the total length of the log - this is the total number of commands in the log.
+    /// The length of the index and log should be equal only immediately after compaction.
+    pub fn len(&self) -> usize {
+        self.inner.borrow().len()
+    }
+
+    /// Returns true iff there are zero log entries.
+    pub fn is_empty(&self) -> bool {
+        self.inner.borrow().is_empty()
+    }
+
+    /// Returns the length of the index.
+    pub fn index_len(&self) -> usize {
+        self.inner.borrow().index_len()
+    }
+}
+
+struct InnerAppendLog {
     /// The index mapping all of the active entries in the Log.
     index: HashMap<Box<[u8]>, u64>,
     /// The file descriptor that is used for reading the entries from the log file.
@@ -60,7 +119,7 @@ pub struct AppendLog {
     entry_count: usize,
 }
 
-impl AppendLog {
+impl InnerAppendLog {
     /// Creates a new, empty log.
     // pub fn new() -> Log {
     //     Log {
@@ -69,12 +128,12 @@ impl AppendLog {
     // }
 
     /// Loads a Log from a file on disk, and builds the index.
-    pub fn load(path: &Path) -> Result<AppendLog> {
+    fn load(path: &Path) -> Result<InnerAppendLog> {
         if !path.is_file() || !path.exists() {
             return Err(Error::from(InvalidLogFileError {}));
         }
 
-        let mut log = AppendLog {
+        let mut log = InnerAppendLog {
             index: HashMap::new(),
             log_file_read: OpenOptions::new()
                 .read(true)
@@ -95,7 +154,7 @@ impl AppendLog {
     /// Compacts the current Log to the new path specified.
     ///
     /// It is still possible to write to this log.
-    pub fn compact(&mut self, path: &Path) -> Result<AppendLog> {
+    fn compact(&mut self, path: &Path) -> Result<InnerAppendLog> {
         if path.exists() {
             // We don't want to clobber anything when we compact.
             return Err(Error::from(InvalidLogFileError {}));
@@ -109,7 +168,7 @@ impl AppendLog {
             .append(true)
             .create(true)
             .open(path)?;
-        let mut log = AppendLog {
+        let mut log = InnerAppendLog {
             index: HashMap::new(),
             log_file_read: OpenOptions::new().read(true).write(false).open(path)?,
             log_file_write: write_file,
@@ -132,14 +191,14 @@ impl AppendLog {
     }
 
     /// Flushes any buffered LogEntries to disk.
-    pub fn flush(&mut self) -> Result<()> {
+    fn flush(&mut self) -> Result<()> {
         Ok(())
     }
 
     /// Appends the LogEntry to the Log and updates the index as required.
     ///
     /// If the command is LogCommand::Remove then the key should be None.
-    pub fn append(&mut self, cmd: LogCommand, key: &[u8], val: Option<&[u8]>) -> Result<()> {
+    fn append(&mut self, cmd: LogCommand, key: &[u8], val: Option<&[u8]>) -> Result<()> {
         let entry = LogEntry::new(cmd.clone(), key, val);
 
         // Append the file to the log.
@@ -165,12 +224,12 @@ impl AppendLog {
     }
 
     /// Returns true if the provided key resides in the index.
-    pub fn contains(&self, key: &[u8]) -> bool {
+    fn contains(&self, key: &[u8]) -> bool {
         self.index.contains_key(key)
     }
 
     /// Returns a given LogEntry referenced by the key String, or None if it does not exist.
-    pub fn fetch_by_key(&mut self, key: &[u8]) -> Result<Option<Box<[u8]>>> {
+    fn fetch_by_key(&mut self, key: &[u8]) -> Result<Option<Box<[u8]>>> {
         let offset = match self.index.get(key) {
             Some(o) => *o,
             None => return Ok(None),
@@ -188,19 +247,19 @@ impl AppendLog {
     }
 
     /// The current length of the log in LogEntries.
-    pub fn len(&self) -> usize {
+    fn len(&self) -> usize {
         self.entry_count
     }
 
     /// Returns true if this is an empty log.
-    pub fn is_empty(&self) -> bool {
+    fn is_empty(&self) -> bool {
         self.entry_count == 0
     }
 
     /// The number of entries in the index.
     ///
     /// This is the number of entries that are addressable from the current state of the log.
-    pub fn index_len(&self) -> usize {
+    fn index_len(&self) -> usize {
         self.index.len()
     }
 
@@ -249,7 +308,7 @@ impl AppendLog {
     }
 }
 
-impl Drop for AppendLog {
+impl Drop for InnerAppendLog {
     fn drop(&mut self) {
         match self.flush() {
             Ok(_) => {}
@@ -281,7 +340,7 @@ mod test {
     #[test]
     fn log_load_empty_file() {
         let p = create_empty_temp_file();
-        AppendLog::load(p.as_path()).unwrap();
+        InnerAppendLog::load(p.as_path()).unwrap();
     }
 
     #[test]
@@ -289,7 +348,7 @@ mod test {
         let p = create_empty_temp_file();
 
         {
-            let mut log = AppendLog::load(p.as_path()).unwrap();
+            let mut log = InnerAppendLog::load(p.as_path()).unwrap();
             log.append(LogCommand::Set, b"aaaa", Some(b"1111")).unwrap();
             log.append(LogCommand::Set, b"bbbb", Some(b"2222")).unwrap();
             log.append(LogCommand::Set, b"cccc", Some(b"3333")).unwrap();
@@ -317,7 +376,7 @@ mod test {
         }
 
         {
-            let mut log = AppendLog::load(p.as_path()).unwrap();
+            let mut log = InnerAppendLog::load(p.as_path()).unwrap();
 
             assert_eq!(log.fetch_by_key(b"aaaa").unwrap(), None);
             assert_eq!(
