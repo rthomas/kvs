@@ -173,9 +173,9 @@ impl KvStore {
         let mut new_log = PathBuf::from(&self.log_file);
         new_log.set_file_name(new_name);
         self.log.write().unwrap().compact(&new_log)?;
-        self.log_file = new_log;
-
+        
         fs::remove_file(self.log_file.to_owned())?;
+        self.log_file = new_log;
         
         Ok(())
     }

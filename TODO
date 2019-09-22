@@ -1,4 +1,4 @@
 - DONE - Interior mutability for AppendLog
-- There is a bug with the log file creation and compaction not working correctly.
+- DONE - There is a bug with the log file creation and compaction not working correctly.
 - Should be streaming the values rather than having them in mem - especially relevant during compaction.
 - Part 3 of the kvs project for exposing a network server and client.
