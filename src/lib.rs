@@ -111,7 +111,7 @@ impl KvStore {
 
         let store = KvStore {
             log: Arc::new(RwLock::new(log)),
-            log_file: log_file,
+            log_file,
         };
         // store.compact_log()?;
         Ok(store)
@@ -128,7 +128,9 @@ impl KvStore {
     /// Set a value for a given key, overriding a previously set value if it exists.
     pub fn set(&mut self, key: String, val: String) -> Result<()> {
         self.log
-            .write().unwrap().append(LogCommand::Set, key.as_bytes(), Some(val.as_bytes()))?;
+            .write()
+            .unwrap()
+            .append(LogCommand::Set, key.as_bytes(), Some(val.as_bytes()))?;
         self.try_compact()
     }
 
@@ -169,14 +171,14 @@ impl KvStore {
         new_name.push_str(".");
         new_name.push_str(i.as_str());
         eprintln!("New Log Name: {}", new_name);
-        
+
         let mut new_log = PathBuf::from(&self.log_file);
         new_log.set_file_name(new_name);
         self.log.write().unwrap().compact(&new_log)?;
-        
+
         fs::remove_file(self.log_file.to_owned())?;
         self.log_file = new_log;
-        
+
         Ok(())
     }
 }

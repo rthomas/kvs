@@ -85,7 +85,7 @@ impl AppendLog {
     pub fn contains(&self, key: &[u8]) -> bool {
         self.inner.borrow_mut().contains(key)
     }
-    
+
     /// Fetches the value from the index.
     pub fn fetch_by_key(&self, key: &[u8]) -> Result<Option<Box<[u8]>>> {
         self.inner.borrow_mut().fetch_by_key(key)
