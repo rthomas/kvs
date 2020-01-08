@@ -161,7 +161,8 @@ impl KvStore {
         self.compact_log()
     }
 
-    fn compact_log(&mut self) -> Result<()> {
+    /// Compacts the log to a new file.
+    pub fn compact_log(&mut self) -> Result<()> {
         let name = self.log_file.file_name().unwrap().to_string_lossy();
         let s: Vec<&str> = name.rsplit('.').collect();
         let mut idx: u64 = s[0].parse()?;

@@ -181,7 +181,9 @@ impl InnerAppendLog {
                     log.append(LogCommand::Set, &k, Some(bytes.as_ref()))?;
                 }
                 None => {
-                    log.append(LogCommand::Set, &k, None)?;
+                    // This "should not occur" as the index tracks what is added and removed
+                    // but in the event where we get back a None from fetch_by_key then we
+                    // drop it here on compact.
                 }
             }
         }

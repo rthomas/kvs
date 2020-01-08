@@ -35,6 +35,10 @@ fn main() -> Result<()> {
                         .help("The key to remove."),
                 ),
         )
+        .subcommand(
+            SubCommand::with_name("compact")
+                .about("Compacts the KV Store file."),
+        )
         .get_matches();
 
     let mut kv_store = KvStore::open(std::env::current_dir()?.as_path())?;
@@ -77,6 +81,10 @@ fn main() -> Result<()> {
                 std::process::exit(1);
             }
         }
+    }
+
+    if let Some(_) = matches.subcommand_matches("compact") {
+        kv_store.compact_log()?;
     }
 
     Ok(())
